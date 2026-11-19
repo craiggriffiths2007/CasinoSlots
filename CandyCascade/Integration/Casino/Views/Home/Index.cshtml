@@ -1,0 +1,150 @@
+@{
+    ViewData["Title"] = "Welcome";
+
+    var isSignedIn = User.Identity?.IsAuthenticated == true;
+
+    var phoenixUrl = Url.Action("Index", "Game") ?? "/Game";
+    var reelCatchUrl = Url.Action("ReelCatch", "Game") ?? "/Game/ReelCatch";
+
+    var phoenixPlayUrl = isSignedIn
+        ? phoenixUrl
+        : Url.Page("/Account/Login", new { area = "Identity", returnUrl = phoenixUrl });
+
+    var reelCatchPlayUrl = isSignedIn
+        ? reelCatchUrl
+        : Url.Page("/Account/Login", new { area = "Identity", returnUrl = reelCatchUrl });
+
+    var tempestUrl = Url.Action("Index", "Tempest") ?? "/Tempest";
+    var tempestPlayUrl = isSignedIn ? tempestUrl : Url.Page("/Account/Login", new { area = "Identity", returnUrl = tempestUrl });
+    var credits = (long)(ViewBag.Credits ?? 10000L);
+}
+
+<div class="casino-public-home">
+    <section class="casino-welcome casino-home-hero">
+        <div class="casino-welcome-glow"></div>
+        <div class="casino-welcome-content">
+            <div class="casino-suit-row">♠ &nbsp; ♦ &nbsp; ♣ &nbsp; ♥</div>
+            <p class="casino-eyebrow">WELCOME TO</p>
+            <img src="/images/craigscasino.png"
+                 class="casino-main-logo"
+                 alt="Craigs Casino" />
+            <p class="casino-welcome-copy">Pick a game, take your seat and play with credits.</p>
+
+            <div class="casino-welcome-actions">
+                
+
+                @if (!isSignedIn)
+                {
+                }
+            </div>
+        </div>
+    </section>
+
+    <section id="games" class="casino-public-games">
+
+        <div class="lobby-header">
+            <div>
+                <p class="casino-eyebrow">CASINO FLOOR</p>
+                <h2>CHOOSE YOUR GAME</h2>
+                <p>
+                    @if (isSignedIn)
+                    {
+                        <text>Pick a machine and play.</text>
+                    }
+                    else
+                    {
+                        <text>Try a free demo, or log in to play with your account credits.</text>
+                    }
+                </p>
+            </div>
+
+            @if (isSignedIn)
+            {
+               
+            }
+        </div>
+
+
+        <div class="casino-game-grid">
+
+            <div class="casino-game-card candy-cascade-game">
+                <div class="game-art">
+                    <img src="~/images/candy-cascade.png" asp-append-version="true" loading="lazy" alt="Candy Cascade sweet factory with glowing syrup tanks and candy conveyors" />
+                    <div class="game-art-shade"></div>
+                    <div class="game-badge">7 × 7 CLUSTER SLOTS</div>
+                </div>
+                <div class="game-card-info">
+                    <div><h2>CANDY CASCADE</h2><p>Sweet factory • cascading candies • free spins</p></div>
+                    <div class="d-flex gap-2">
+                        <a class="game-play" href="@Url.Content("~/Demo/CandyCascade")">DEMO</a>
+                        <a class="game-play" href="@Url.Content("~/Game/CandyCascade")">PLAY</a>
+                    </div>
+                </div>
+            </div>
+
+            <div
+   class="casino-game-card phoenix-game">
+    <div class="game-art phoenix-art">
+        <img src="/images/phoenix2.png"
+             alt="Phoenix Slot 2" />
+        <div class="game-art-shade"></div>
+        <div class="game-badge">CASCADE SLOTS</div>
+    </div>
+    <div class="game-card-info">
+        <div>
+            <h2>PHOENIX SLOT 2</h2>
+            <p>Falling reels and fiery wins</p>
+        </div>
+        <div class="d-flex gap-2">@if (!isSignedIn) { <a class="game-play" href="@Url.Action("PhoenixSlot2", "Demo")">DEMO</a> }<a class="game-play" href="@Url.Action("PhoenixSlot2", "Game")">PLAY</a></div>
+    </div>
+</div>
+
+
+
+            <div class="casino-game-card reelcatch-game">
+                <div class="game-art reelcatch-art">
+                    <img src="/images/reel-game.png" alt="Reel Catch" />
+                    <div class="game-art-shade"></div>
+                    <div class="game-badge">10 PAYLINES</div>
+                </div>
+
+                <div class="game-card-info">
+                    <div>
+                        <h2>REEL CATCH</h2>
+                        <p>Cash fish • free spins • collector</p>
+                    </div>
+
+                    <div class="d-flex gap-2">@if (!isSignedIn) { <a class="game-play" href="@Url.Action("ReelCatch", "Demo")">DEMO</a> }<a class="game-play" href="@reelCatchPlayUrl">PLAY</a></div>
+                </div>
+            </div>
+
+            
+
+            <div class="casino-game-card">
+                <div class="game-art phoenix-art"><img src="~/images/tempest-temple.png" asp-append-version="true" alt="A storm-lit castle, sparkling gems and a golden crown" loading="lazy" /><div class="game-art-shade"></div><div class="game-badge">TUMBLING SLOTS</div></div>
+                <div class="game-card-info"><div><h2>TEMPEST TEMPLE</h2><p>Gems • lightning multipliers • free spins</p></div><div class="d-flex gap-2"><a class="game-play" href="@Url.Action("Tempest", "Demo")">DEMO</a><a class="game-play" href="@tempestPlayUrl">PLAY</a></div></div>
+            </div>
+
+                        <div class="casino-game-card phoenix-game">
+                <div class="game-art phoenix-art">
+                    <img src="/images/phoenix-game.png" alt="Phoenix Slots" />
+                    <div class="game-art-shade"></div>
+                    <div class="game-badge">CASCADE SLOTS</div>
+                </div>
+                <div class="game-card-info">
+                    <div>
+                        <h2>PHOENIX</h2>
+                        <p>5 × 3 cascading wins</p>
+                    </div>
+                    <div class="d-flex gap-2">@if (!isSignedIn) { <a class="game-play" href="@Url.Action("Index", "Demo")">DEMO</a> }<a class="game-play" href="@phoenixPlayUrl">PLAY</a></div>
+                </div>
+            </div>
+
+        </div>
+        <p class="lobby-tip">
+            @(isSignedIn ? "SELECT A GAME TO BEGIN" : "TRY A DEMO — NO LOGIN REQUIRED")
+        </p>
+    </section>
+</div>
+
+

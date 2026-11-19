@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+
+    <title>Unity Web Player | Candy Cascade</title>
+
+    <link rel="shortcut icon"
+          href="/games/candy-cascade/TemplateData/favicon.ico">
+
+    <link rel="stylesheet"
+          href="/games/candy-cascade/TemplateData/style.css">
+    <style>
+        html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#211224}
+        #unity-container,#unity-container.unity-desktop,#unity-container.unity-mobile{position:absolute;inset:0;width:100%;height:100%;transform:none}
+        #unity-fullscreen-container{width:100%!important;height:100%!important}
+        #unity-footer{position:absolute;right:8px;top:8px}
+        #unity-logo-title-footer,#unity-build-title{display:none}
+        #unity-fullscreen-button{background-color:#21122488;border-radius:4px}
+        #unity-canvas{outline:none}
+    </style>
+</head>
+
+<body>
+
+    <div id="unity-container" class="unity-desktop">
+
+        <div id="unity-fullscreen-container">
+
+            <canvas id="unity-canvas"
+                    width="1240"
+                    height="800"
+                    tabindex="0">
+            </canvas>
+
+            <div id="unity-loading-container">
+
+                <div id="unity-loading-bar">
+
+                    <div id="unity-logo"></div>
+
+                    <div id="unity-progress-bar-empty">
+                        <div id="unity-progress-bar-full"></div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <div id="unity-warning"></div>
+
+        <div id="unity-footer">
+
+            <div id="unity-logo-title-footer"></div>
+
+            <div id="unity-fullscreen-button"></div>
+
+            <div id="unity-build-title">
+                Candy Cascade
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        // =========================================================
+        // UNITY
+        // =========================================================
+
+        let canvas =
+            document.querySelector("#unity-canvas");
+
+        let fullscreenContainer =
+            document.querySelector(
+                "#unity-fullscreen-container");
+
+        let candyUnityInstance = null;
+        window.CandyKeyboardSpin = () => {
+            if (!candyUnityInstance) return false;
+            candyUnityInstance.SendMessage('Candy Cascade', 'KeyboardSpin', '');
+            return true;
+        };
+        document.addEventListener('keydown', event => {
+            if (event.ctrlKey || event.altKey || event.metaKey ||
+                !['Space', 'Enter', 'NumpadEnter'].includes(event.code) ||
+                event.target?.closest?.('input,textarea,select,button,a,[contenteditable="true"]')) return;
+            if (event.repeat) { if (candyUnityInstance) event.preventDefault(); return; }
+            if (window.CandyKeyboardSpin()) event.preventDefault();
+        });
+
+
+
+        // =========================================================
+        // PENDING ACCOUNT MESSAGE
+        //
+        // Unity can request the account while the WebGL instance is
+        // still starting. If the HTTP request finishes first, keep
+        // the result here and send it once Unity is ready.
+        // =========================================================
+
+        let pendingAccountMessage = null;
+        let pendingAccountError = null;
+
+
+        // =========================================================
+        // CASINO ACCOUNT
+        // =========================================================
+
+        window.CandyLoadCasinoAccount =
+            async function (gameObjectName) {
+
+                try {
+
+                    const accountUrl =
+                    window.location.pathname.startsWith("/Demo/")
+                        ? "/Demo/Game/CandyCascade/account"
+                        : "/Game/CandyCascade/account";
+
+                const response =
+                    await fetch(
+                        accountUrl,
+                        {
+                            credentials: "same-origin"
+                       });
+
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            "HTTP " + response.status);
+                    }
+
+
+                    const account =
+                        await response.json();
+
+                        window.parent.postMessage(
+    {
+        type: "candy-cascade-balance",
+
+        balance:
+            Number(account.casinoCredits)
+                .toLocaleString("en-GB")
+    },
+    window.location.origin);
+                    // Send the three values as:
+                    //
+                    // casinoCredits|userId|antiforgeryToken
+                    //
+                    // CasinoWallet.cs splits these using '|'.
+
+                    const accountData =
+                        account.casinoCredits.toString() +
+                        "|" +
+                        account.userId +
+                        "|" +
+                        account.token;
+
+
+                    if (candyUnityInstance) {
+
+                        candyUnityInstance.SendMessage(
+                            gameObjectName,
+                            "CasinoAccountLoaded",
+                            accountData);
+                    }
+                    else {
+
+                        pendingAccountMessage = {
+                            gameObjectName: gameObjectName,
+                            data: accountData
+                        };
+                    }
+                }
+                catch (error) {
+
+                    console.error(
+                        "Candy account load failed:",
+                        error);
+
+
+                    if (candyUnityInstance) {
+
+                        candyUnityInstance.SendMessage(
+                            gameObjectName,
+                            "CasinoAccountFailed",
+                            error.toString());
+                    }
+                    else {
+
+                        pendingAccountError = {
+                            gameObjectName: gameObjectName,
+                            error: error.toString()
+                        };
+                    }
+                }
+            };
+
+
+        // =========================================================
+        // CASINO SPIN
+        // =========================================================
+
+        window.CandyCasinoSpin =
+            async function (
+                gameObjectName,
+                bet,
+                requestId,
+                accountId,
+                token, buyBonus = false) {
+
+                try {
+
+                    const form =
+                        new URLSearchParams();
+
+
+                    form.append(
+                        "bet",
+                        bet.toString());
+
+                    form.append(
+                        "requestId",
+                        requestId);
+
+                    form.append(
+                        "accountId",
+                        accountId);
+
+
+                    const spinUrl =
+    window.location.pathname.startsWith("/Demo/")
+        ? "/Demo/Game/CandyCascade/spin"
+        : "/Game/CandyCascade/spin";
+
+    const response =
+        await fetch(
+            buyBonus ? spinUrl.replace(/spin$/, "buy-free-spins") : spinUrl,
+            {
+                method: "POST",
+
+                credentials:
+                    "same-origin",
+
+                headers: {
+
+                    "RequestVerificationToken":
+                        token,
+
+                    "Content-Type":
+                        "application/x-www-form-urlencoded"
+                },
+
+                body:
+                    form.toString()
+            });
+
+
+                    const text =
+                        await response.text();
+
+
+                    if (buyBonus && (response.status === 400 || response.status === 401 || response.status === 403 || response.status === 409)) {
+                        candyUnityInstance.SendMessage(gameObjectName, "CasinoPurchaseRejected", text);
+                        return;
+                    }
+                    if (!response.ok) {
+
+                        throw new Error(
+                            "HTTP " +
+                            response.status +
+                            ": " +
+                            text);
+                    }
+
+
+                    // -----------------------------------------------------
+                    // UPDATE MVC NAVBAR BALANCE
+                    // -----------------------------------------------------
+
+                    const result =
+                        JSON.parse(text);
+
+
+                    window.parent.postMessage(
+                        {
+                            type: "candy-cascade-balance",
+
+                            balance:
+                                Number(result.balance)
+                                    .toLocaleString("en-GB")
+                        },
+                        window.location.origin);
+
+
+                    // -----------------------------------------------------
+                    // SEND RESULT TO UNITY
+                    // -----------------------------------------------------
+
+                    if (!candyUnityInstance) {
+
+                        throw new Error(
+                            "Unity instance is not ready.");
+                    }
+
+
+                    candyUnityInstance.SendMessage(
+                        gameObjectName,
+                        "CasinoSpinLoaded",
+                        text);
+                }
+                catch (error) {
+
+                    console.error(
+                        "Candy spin failed:",
+                        error);
+
+
+                    if (candyUnityInstance) {
+
+                        candyUnityInstance.SendMessage(
+                            gameObjectName,
+                            "CasinoSpinFailed",
+                            error.toString());
+                    }
+                }
+            };
+
+
+        // =========================================================
+        // UNITY WARNING BANNER
+        // =========================================================
+
+        function unityShowBanner(msg, type) {
+
+            var warningBanner =
+                document.querySelector(
+                    "#unity-warning");
+
+
+            function updateBannerVisibility() {
+
+                warningBanner.style.display =
+                    warningBanner.children.length
+                        ? "block"
+                        : "none";
+            }
+
+
+            var div =
+                document.createElement("div");
+
+
+            div.innerHTML = msg;
+
+            warningBanner.appendChild(div);
+
+
+            if (type == "error") {
+
+                div.style =
+                    "background: red; padding: 10px;";
+            }
+            else {
+
+                if (type == "warning") {
+
+                    div.style =
+                        "background: yellow; padding: 10px;";
+                }
+
+
+                setTimeout(
+                    function () {
+
+                        warningBanner.removeChild(div);
+
+                        updateBannerVisibility();
+
+                    },
+                    5000);
+            }
+
+
+            updateBannerVisibility();
+        }
+
+
+        // =========================================================
+        // UNITY BUILD CONFIGURATION
+
+        // =========================================================
+
+        var buildUrl =
+            "/games/candy-cascade/Build";
+
+
+        var loaderUrl =
+            buildUrl +
+            "/{{{ LOADER_FILENAME }}}";
+
+
+        var config = {
+
+            arguments: [],
+
+            dataUrl:
+                buildUrl +
+                "/{{{ DATA_FILENAME }}}",
+
+            frameworkUrl:
+                buildUrl +
+                "/{{{ FRAMEWORK_FILENAME }}}",
+
+            codeUrl:
+                buildUrl +
+                "/{{{ CODE_FILENAME }}}",
+
+            streamingAssetsUrl:
+                "StreamingAssets",
+
+            fullscreenElementID:
+                "unity-fullscreen-container",
+
+            companyName:
+    "Candy Garden Studio",
+
+productName:
+    "Candy Cascade",
+
+productVersion:
+    "1.0",
+
+            showBanner:
+                unityShowBanner
+        };
+
+
+        // =========================================================
+        // MOBILE
+        // =========================================================
+
+        if (
+            /iPhone|iPad|iPod|Android/i
+                .test(navigator.userAgent)
+        ) {
+
+            var meta =
+                document.createElement("meta");
+
+
+            meta.name =
+                "viewport";
+
+
+            meta.content =
+                "width=device-width, " +
+                "height=device-height, " +
+                "initial-scale=1.0, " +
+                "user-scalable=no, " +
+                "shrink-to-fit=yes";
+
+
+            document
+                .getElementsByTagName("head")[0]
+                .appendChild(meta);
+
+
+            document.querySelector(
+                "#unity-container"
+            ).className =
+                "unity-mobile";
+
+
+            canvas.className =
+                "unity-mobile";
+
+
+            // Uncomment if lower resolution is required
+            // for mobile performance:
+            //
+            // config.devicePixelRatio = 1;
+        }
+        else {
+
+            fullscreenContainer.style.width =
+                "881px";
+
+            fullscreenContainer.style.height =
+                "600px";
+        }
+
+
+        // =========================================================
+        // LOAD UNITY
+        // =========================================================
+
+        var script =
+            document.createElement("script");
+
+
+        script.src =
+            loaderUrl;
+
+
+        script.onload =
+            () => {
+
+                const loadingContainer =
+                    document.querySelector(
+                        "#unity-loading-container");
+
+
+                const progressBarFull =
+                    document.querySelector(
+                        "#unity-progress-bar-full");
+
+
+                createUnityInstance(
+                    canvas,
+                    config,
+                    (progress) => {
+
+                        if (progress < 1) {
+
+                            loadingContainer.style.display =
+                                "block";
+
+
+                            progressBarFull.style.width =
+                                100 * progress + "%";
+                        }
+                        else {
+
+                            loadingContainer.style.display =
+                                "none";
+                        }
+                    })
+
+                    .then(
+                        (unityInstance) => {
+
+                            // -----------------------------------------
+                            // Unity is ready.
+                            // -----------------------------------------
+
+                            candyUnityInstance =
+                                unityInstance;
+
+
+                            // -----------------------------------------
+                            // Deliver an account response that arrived
+                            // before Unity finished starting.
+                            // -----------------------------------------
+
+                            if (pendingAccountMessage) {
+
+                                candyUnityInstance.SendMessage(
+                                    pendingAccountMessage.gameObjectName,
+                                    "CasinoAccountLoaded",
+                                    pendingAccountMessage.data);
+
+
+                                pendingAccountMessage =
+                                    null;
+                            }
+
+
+                            // -----------------------------------------
+                            // Or deliver a pending account error.
+                            // -----------------------------------------
+
+                            if (pendingAccountError) {
+
+                                candyUnityInstance.SendMessage(
+                                    pendingAccountError.gameObjectName,
+                                    "CasinoAccountFailed",
+                                    pendingAccountError.error);
+
+
+                                pendingAccountError =
+                                    null;
+                            }
+
+
+                            // -----------------------------------------
+                            // Fullscreen button
+                            // -----------------------------------------
+
+                            document.querySelector(
+                                "#unity-fullscreen-button"
+                            ).onclick =
+                                () => {
+
+                                    unityInstance.SetFullscreen(1);
+                                };
+                        })
+
+                    .catch(
+                        (message) => {
+
+                            alert(message);
+                        });
+            };
+
+
+        document.body.appendChild(script);
+
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,7 @@
+# Sweet factory background
+
+Generated with the built-in image-generation tool. Saved asset: `Assets/Resources/Art/SweetFactory.png` (1536 × 1024 PNG). Original image is preserved; runtime shading is supplied separately by `SweetFactoryBackdrop.cs`.
+
+## Final generation prompt
+
+Use case: stylized-concept. Asset type: background artwork for an original candy slot video game, landscape 1536x1024. Create a crazy, fantastical sweet factory interior, richly detailed polished 3D cartoon game art: twisting candy-striped pipes across the ceiling, giant glass vats of glowing pink and turquoise syrup, brass candy-making machines, spiralling chutes, oversized lollipops, jellybean conveyor belts at the bottom corners, cotton-candy steam. Playful impossible machinery, glossy confectionery surfaces, magical warm highlights and deep plum shadows, pink mint gold and violet accents. Composition is essential: the main 7x7 game grid will overlay the region x=23%-62%, y=22%-83%; keep that region dark, softly atmospheric and low contrast, as an open factory aisle, with no sharp machinery or foreground candies in that zone. Keep left and right middle regions relatively dark for white UI text, with spectacular machinery concentrated at outer edges and upper corners. Full-bleed immersive environment, continuous artwork without any rectangular panels, borders, frames, slot grids, symbols, buttons or text. No logos or watermark. Background art only.

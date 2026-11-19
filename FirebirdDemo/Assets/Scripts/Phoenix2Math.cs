@@ -1,0 +1,720 @@
+using System.Collections.Generic;
+using System.Linq;
+using System;
+
+
+// Shared verbatim by the casino and Unity. Production injects cryptographic RNG;
+// deterministic RNG and bonusWeight overrides are for offline verification only.
+namespace PhoenixSlot2Math
+{
+public class Engine
+{
+    private const int Rows = 3;
+    private const int Reels = 5;
+
+    public bool ForceWin { get; set; }
+    private bool freeSpin;
+    private readonly Func<int, int> next;
+    private readonly int bonusWildWeight;
+    private int creditRemainder;
+    public const string Version = "phoenix2-96-v2";
+    public const int MaxBonusSpins = 15;
+    public const int MaxCascades = 100;
+    public const int BonusWildWeight = 515;
+    public const int BasePayScale = 1581;
+    public const int CreditDivisor = 25000;
+    public static int Award(int cascades) => cascades >= 8 ? 15 : cascades == 7 ? 12 : cascades == 6 ? 9 : cascades == 5 ? 7 : cascades == 4 ? 5 : 0;
+    public static int Retrigger(int cascades) => 0;
+    public Engine(Func<int,int> random, int bonusWeight = BonusWildWeight)
+    {
+        next = random ?? throw new ArgumentNullException(nameof(random));
+        bonusWildWeight = bonusWeight;
+    }
+
+    private static readonly
+        (SymbolType Symbol, int Weight)[]
+        SymbolWeights =
+    {
+        (SymbolType.Cherry,    18),
+        (SymbolType.Lemon,     18),
+        (SymbolType.Plum,      16),
+        (SymbolType.Bell,      14),
+        (SymbolType.Seven,     12),
+        (SymbolType.Diamond,   10),
+
+        (SymbolType.BlueOrb,    6),
+        (SymbolType.GreenOrb,   5),
+        (SymbolType.YellowOrb,  4),
+
+        // Wild
+        (SymbolType.RedOrb,     5)
+    };
+
+    private static readonly int[][] Paylines =
+    {
+        new[] { 1, 1, 1, 1, 1 },
+        new[] { 0, 0, 0, 0, 0 },
+        new[] { 2, 2, 2, 2, 2 },
+        new[] { 0, 1, 2, 1, 0 },
+        new[] { 2, 1, 0, 1, 2 },
+        new[] { 1, 2, 1, 2, 1 },
+        new[] { 1, 0, 1, 0, 1 },
+        new[] { 2, 1, 2, 1, 2 },
+        new[] { 0, 1, 0, 1, 0 },
+        new[] { 0, 0, 1, 2, 2 },
+        new[] { 2, 2, 1, 0, 0 },
+        new[] { 0, 1, 1, 1, 2 },
+        new[] { 2, 1, 1, 1, 0 },
+        new[] { 0, 2, 2, 2, 0 },
+        new[] { 2, 0, 0, 0, 2 },
+        new[] { 1, 0, 0, 0, 1 },
+        new[] { 1, 2, 2, 2, 1 },
+        new[] { 0, 2, 0, 2, 0 },
+        new[] { 2, 0, 2, 0, 2 },
+        new[] { 0, 2, 1, 2, 0 },
+        new[] { 2, 0, 1, 0, 2 },
+        new[] { 0, 0, 2, 0, 0 },
+        new[] { 2, 2, 0, 2, 2 },
+        new[] { 1, 1, 0, 1, 2 },
+        new[] { 1, 1, 2, 1, 0 },
+    };
+
+    public SpinResult Spin(long bet = 10, bool isFreeSpin = false)
+    {
+        if (bet != 10 && bet != 25 && bet != 50 && bet != 100)
+            throw new ArgumentOutOfRangeException(nameof(bet));
+        freeSpin = isFreeSpin; creditRemainder = next(CreditDivisor);
+        SpinResult result = new();
+
+        SymbolType?[,] board =
+            CreateBoard();
+
+        if (ForceWin)
+        {
+            board[1, 0] = SymbolType.Seven;
+            board[1, 1] = SymbolType.Seven;
+            board[1, 2] = SymbolType.Seven;
+        }
+
+        result.InitialBoard =
+            CloneBoard(board);
+
+        HashSet<int> activePhoenixReels =
+            new();
+
+        // Safety guard as well as the normal
+        // "no wins" termination.
+        int cascadeCount = 0;
+
+        while (cascadeCount < MaxCascades)
+        {
+            cascadeCount++;
+
+            List<WinResult> wins =
+                FindPaylineWins(
+                    board,
+                    bet);
+
+            if (wins.Count == 0)
+                break;
+
+            CascadeResult cascade =
+                new()
+                {
+                    BoardBefore =
+                        CloneBoard(board),
+
+                    Wins = wins,
+
+                    Win =
+                        wins.Sum(w => w.Win)
+                };
+
+            List<int> newPhoenixReels =
+                FindCompletelyRemovedReels(wins)
+                    .Where(reel =>
+                        !activePhoenixReels.Contains(
+                            reel))
+                    .ToList();
+
+            RemoveWinningSymbols(
+                board,
+                wins);
+
+            // Existing Phoenix reels expire
+            // after participating in this evaluation.
+            cascade.ExpiredPhoenixReels =
+                activePhoenixReels.ToList();
+
+            foreach (int reel
+                     in activePhoenixReels)
+            {
+                for (int row = 0;
+                     row < Rows;
+                     row++)
+                {
+                    board[row, reel] = null;
+                }
+            }
+
+            activePhoenixReels.Clear();
+
+            DropSymbols(board);
+
+            FillEmptySpaces(board);
+
+            // Only THIS can create a Phoenix.
+            // It is never generated by GetRandomSymbol().
+            foreach (int reel
+                     in newPhoenixReels)
+            {
+                board[0, reel] =
+                    SymbolType.Phoenix;
+
+                board[1, reel] =
+                    SymbolType.Phoenix;
+
+                board[2, reel] =
+                    SymbolType.Phoenix;
+
+                activePhoenixReels.Add(reel);
+
+                cascade.PhoenixReels.Add(
+                    reel);
+            }
+
+            cascade.BoardAfter =
+                CloneBoard(board);
+
+            result.Cascades.Add(cascade);
+
+            result.TotalWin +=
+                cascade.Win;
+        }
+
+        return result;
+    }
+
+    private SymbolType?[,] CreateBoard()
+    {
+        SymbolType?[,] board =
+            new SymbolType?[Rows, Reels];
+
+        for (int row = 0;
+             row < Rows;
+             row++)
+        {
+            for (int reel = 0;
+                 reel < Reels;
+                 reel++)
+            {
+                board[row, reel] =
+                    GetRandomSymbol();
+            }
+        }
+
+        return board;
+    }
+
+    private List<WinResult> FindPaylineWins(
+        SymbolType?[,] board,
+        long bet)
+    {
+        List<WinResult> wins =
+            new();
+
+        for (int paylineIndex = 0;
+             paylineIndex < Paylines.Length;
+             paylineIndex++)
+        {
+            int[] payline =
+                Paylines[paylineIndex];
+
+            SymbolType? targetSymbol =
+                null;
+
+            // Find first non-wild.
+            for (int reel = 0;
+                 reel < Reels;
+                 reel++)
+            {
+                SymbolType? current =
+                    board[
+                        payline[reel],
+                        reel];
+
+                if (current.HasValue &&
+                    !IsWild(current.Value))
+                {
+                    targetSymbol =
+                        current.Value;
+
+                    break;
+                }
+            }
+
+            // Entire line wild:
+            // original engine ignores it.
+            if (!targetSymbol.HasValue)
+                continue;
+
+            int reelsMatched = 0;
+
+            for (int reel = 0;
+                 reel < Reels;
+                 reel++)
+            {
+                SymbolType? actual =
+                    board[
+                        payline[reel],
+                        reel];
+
+                if (actual.HasValue &&
+                    SymbolsMatch(
+                        targetSymbol.Value,
+                        actual.Value))
+                {
+                    reelsMatched++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            int minimumMatch =
+                IsOrb(targetSymbol.Value)
+                    ? 2
+                    : 3;
+
+            if (reelsMatched <
+                minimumMatch)
+            {
+                continue;
+            }
+
+            int multiplier =
+                GetMultiplier(
+                    targetSymbol.Value,
+                    reelsMatched);
+
+            if (multiplier <= 0)
+                continue;
+
+            WinResult win =
+                new()
+                {
+                    Symbol =
+                        targetSymbol.Value,
+
+                    ReelsMatched =
+                        reelsMatched,
+
+                    PaylineIndex =
+                        paylineIndex,
+
+                    Win =
+                        LineWin(bet, multiplier)
+                };
+
+            for (int reel = 0;
+                 reel < reelsMatched;
+                 reel++)
+            {
+                win.Positions.Add(
+                    new SymbolPosition
+                    {
+                        Reel = reel,
+
+                        Row =
+                            payline[reel]
+                    });
+            }
+
+            wins.Add(win);
+        }
+
+        return wins;
+    }
+
+    private static List<int>
+        FindCompletelyRemovedReels(
+            List<WinResult> wins)
+    {
+        HashSet<(int Row, int Reel)>
+            removed =
+                wins
+                    .SelectMany(
+                        w => w.Positions)
+                    .Select(
+                        p => (p.Row, p.Reel))
+                    .ToHashSet();
+
+        List<int> result =
+            new();
+
+        for (int reel = 0;
+             reel < Reels;
+             reel++)
+        {
+            bool allThree =
+                true;
+
+            for (int row = 0;
+                 row < Rows;
+                 row++)
+            {
+                if (!removed.Contains(
+                    (row, reel)))
+                {
+                    allThree = false;
+                    break;
+                }
+            }
+
+            if (allThree)
+                result.Add(reel);
+        }
+
+        return result;
+    }
+
+    private static bool IsWild(
+        SymbolType symbol)
+    {
+        return
+            symbol == SymbolType.RedOrb ||
+            symbol == SymbolType.Phoenix;
+    }
+
+    private static bool IsOrb(
+        SymbolType symbol)
+    {
+        return
+            symbol == SymbolType.BlueOrb ||
+            symbol == SymbolType.GreenOrb ||
+            symbol == SymbolType.YellowOrb;
+    }
+
+    private static bool SymbolsMatch(
+        SymbolType target,
+        SymbolType actual)
+    {
+        return
+            actual == target ||
+            IsWild(actual);
+    }
+
+    private SymbolType GetRandomSymbol()
+    {
+        int totalWeight =
+            SymbolWeights.Sum(
+                x => DrawWeight(x.Symbol, x.Weight));
+
+        int roll =
+            next(totalWeight);
+
+        int runningTotal = 0;
+
+        foreach (var item
+                 in SymbolWeights)
+        {
+            runningTotal +=
+                DrawWeight(item.Symbol, item.Weight);
+
+            if (roll < runningTotal)
+                return item.Symbol;
+        }
+
+        return
+            SymbolWeights[0].Symbol;
+    }
+
+    // Base wild = 5/108. Bonus wild = 515/(103*67+515) = 5/72,
+    // exactly 1.5 times the base probability, preserving non-wild relative odds.
+    private int DrawWeight(SymbolType symbol, int weight) => !freeSpin ? weight :
+        (symbol == SymbolType.RedOrb ? bonusWildWeight : weight * 67);
+
+    // A uniform rounding offset preserves expected fractional line-stake payouts
+    // while settling whole credits. Carry the remainder across all winning lines.
+    private long LineWin(long bet, int multiplier)
+    {
+        long numerator = checked(bet * multiplier * (freeSpin ? 1000 : BasePayScale) + creditRemainder);
+        creditRemainder = (int)(numerator % CreditDivisor);
+        return numerator / CreditDivisor;
+    }
+
+    private static int GetMultiplier(
+        SymbolType symbol,
+        int reelsMatched)
+    {
+        return symbol switch
+        {
+            SymbolType.Cherry =>
+                reelsMatched switch
+                {
+                    3 => 1,
+                    4 => 2,
+                    5 => 5,
+                    _ => 0
+                },
+
+            SymbolType.Lemon =>
+                reelsMatched switch
+                {
+                    3 => 1,
+                    4 => 3,
+                    5 => 6,
+                    _ => 0
+                },
+
+            SymbolType.Plum =>
+                reelsMatched switch
+                {
+                    3 => 2,
+                    4 => 4,
+                    5 => 8,
+                    _ => 0
+                },
+
+            SymbolType.Bell =>
+                reelsMatched switch
+                {
+                    3 => 2,
+                    4 => 5,
+                    5 => 10,
+                    _ => 0
+                },
+
+            SymbolType.Seven =>
+                reelsMatched switch
+                {
+                    3 => 3,
+                    4 => 8,
+                    5 => 15,
+                    _ => 0
+                },
+
+            SymbolType.Diamond =>
+                reelsMatched switch
+                {
+                    3 => 5,
+                    4 => 12,
+                    5 => 25,
+                    _ => 0
+                },
+
+            SymbolType.BlueOrb =>
+                reelsMatched switch
+                {
+                    2 => 1,
+                    3 => 3,
+                    4 => 8,
+                    5 => 20,
+                    _ => 0
+                },
+
+            SymbolType.GreenOrb =>
+                reelsMatched switch
+                {
+                    2 => 2,
+                    3 => 5,
+                    4 => 12,
+                    5 => 30,
+                    _ => 0
+                },
+
+            SymbolType.YellowOrb =>
+                reelsMatched switch
+                {
+                    2 => 3,
+                    3 => 8,
+                    4 => 20,
+                    5 => 50,
+                    _ => 0
+                },
+
+            _ => 0
+        };
+    }
+
+    private static void RemoveWinningSymbols(
+        SymbolType?[,] board,
+        List<WinResult> wins)
+    {
+        HashSet<(int Row, int Reel)>
+            positions =
+                wins
+                    .SelectMany(
+                        w => w.Positions)
+                    .Select(
+                        p => (p.Row, p.Reel))
+                    .ToHashSet();
+
+        foreach (var position
+                 in positions)
+        {
+            board[
+                position.Row,
+                position.Reel] = null;
+        }
+    }
+
+    private static void DropSymbols(
+        SymbolType?[,] board)
+    {
+        for (int reel = 0;
+             reel < Reels;
+             reel++)
+        {
+            List<SymbolType> remaining =
+                new();
+
+            for (int row = Rows - 1;
+                 row >= 0;
+                 row--)
+            {
+                SymbolType? symbol =
+                    board[row, reel];
+
+                if (symbol.HasValue)
+                {
+                    remaining.Add(
+                        symbol.Value);
+                }
+            }
+
+            int targetRow =
+                Rows - 1;
+
+            foreach (SymbolType symbol
+                     in remaining)
+            {
+                board[targetRow, reel] =
+                    symbol;
+
+                targetRow--;
+            }
+
+            while (targetRow >= 0)
+            {
+                board[targetRow, reel] =
+                    null;
+
+                targetRow--;
+            }
+        }
+    }
+
+    private void FillEmptySpaces(
+        SymbolType?[,] board)
+    {
+        for (int row = 0;
+             row < Rows;
+             row++)
+        {
+            for (int reel = 0;
+                 reel < Reels;
+                 reel++)
+            {
+                if (!board[
+                    row,
+                    reel].HasValue)
+                {
+                    board[row, reel] =
+                        GetRandomSymbol();
+                }
+            }
+        }
+    }
+
+    private static SymbolType[,]
+        CloneBoard(
+            SymbolType?[,] source)
+    {
+        SymbolType[,] result =
+            new SymbolType[Rows, Reels];
+
+        for (int row = 0;
+             row < Rows;
+             row++)
+        {
+            for (int reel = 0;
+                 reel < Reels;
+                 reel++)
+            {
+                if (!source[
+                    row,
+                    reel].HasValue)
+                {
+                    throw new System.InvalidOperationException(
+                        "Attempted to clone a board containing an empty cell.");
+                }
+
+                result[row, reel] =
+                    source[
+                        row,
+                        reel]!.Value;
+            }
+        }
+
+        return result;
+    }
+}
+
+    public enum SymbolType { Bell, BlueOrb, Cherry, Diamond, GreenOrb, Lemon, Phoenix, Phoenix2, Plum, RedOrb, Seven, YellowOrb }
+public class SpinResult
+{
+    public SymbolType[,] InitialBoard { get; set; }
+        = new SymbolType[3, 5];
+
+    public List<CascadeResult> Cascades { get; set; }
+        = new();
+
+    public long TotalWin { get; set; }
+    public List<SpinResult> FreeSpins { get; set; } = new();
+    public int FreeSpinsAwarded { get; set; }
+}
+
+public class CascadeResult
+{
+    public SymbolType[,] BoardBefore { get; set; }
+        = new SymbolType[3, 5];
+
+    public SymbolType[,] BoardAfter { get; set; }
+        = new SymbolType[3, 5];
+
+    public List<WinResult> Wins { get; set; }
+        = new();
+
+    public long Win { get; set; }
+
+    public List<int> PhoenixReels { get; set; }
+        = new();
+
+    public List<int> ExpiredPhoenixReels { get; set; }
+        = new();
+}
+
+public class WinResult
+{
+    public SymbolType Symbol { get; set; }
+
+    public int ReelsMatched { get; set; }
+
+    public int PaylineIndex { get; set; }
+
+    public long Win { get; set; }
+
+    public List<SymbolPosition> Positions { get; set; }
+        = new();
+}
+
+public class SymbolPosition
+{
+    public int Row { get; set; }
+
+    public int Reel { get; set; }
+}
+
+}

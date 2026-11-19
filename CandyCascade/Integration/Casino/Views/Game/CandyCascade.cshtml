@@ -1,0 +1,27 @@
+@{
+    ViewData["Title"] = "Candy Cascade";
+    bool demo = ViewBag.IsDemo == true;
+    var source = Url.Content("~/games/candy-cascade/index.html") + (demo ? "?casino=demo" : "?casino=play");
+}
+<section class="container-fluid text-center py-3">
+    <p role="status">@(demo ? "DEMO · Practice credits only. Your casino balance is never used." : "PLAY · Using your casino account credits.")</p>
+    <iframe id="candy-cascade-frame" src="@source" title="Candy Cascade"
+            style="display:block;width:100%;max-width:881px;height:600px;margin:0 auto;border:0;"
+            allow="fullscreen; autoplay" allowfullscreen></iframe>
+    <p class="mt-2"><a href="@Url.Action("Index", "Home")">Back to games</a>
+        @if (demo) { <text> · <a href="@Url.Content("~/Game/CandyCascade")">Play with account credits</a></text> }
+    </p>
+</section>
+@section Scripts {
+    <script>
+        window.addEventListener('message', event => {
+            const frame = document.getElementById('candy-cascade-frame');
+            if (event.origin !== location.origin || event.source !== frame.contentWindow ||
+                event.data?.type !== 'candy-cascade-balance' ||
+                typeof event.data.balance !== 'string' || !/^\d+$/.test(event.data.balance)) return;
+            if (@(demo ? "true" : "false")) return;
+            const balance = document.getElementById('balance');
+            if (balance) balance.textContent = event.data.balance;
+        });
+    </script>
+}

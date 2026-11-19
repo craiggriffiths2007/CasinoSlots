@@ -1,0 +1,45 @@
+# Unity-generated directories at the repository root or in each Unity project.
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/[Vv]alidation/
+/*/[Ll]ibrary/
+/*/[Tt]emp/
+/*/[Oo]bj/
+/*/[Bb]uild/
+/*/[Bb]uilds/
+/*/[Ll]ogs/
+/*/[Uu]ser[Ss]ettings/
+/*/[Mm]emoryCaptures/
+/*/[Rr]ecordings/
+/*/[Vv]alidation/
+
+# IDE caches and Unity-generated solutions/projects.
+.vs/
+.idea/
+.gradle/
+.consulo/
+.utmp/
+*.suo
+*.user
+*.userprefs
+*.opendb
+*.VC.db
+/*/*.sln
+/*/*.slnx
+/*/Assembly-CSharp*.csproj
+/*/Unity.*.csproj
+
+# Build logs, crash reports and packaged players.
+*.log
+sysinfo.txt
+crashlytics-build.properties
+*.apk
+*.aab
+*.app/
