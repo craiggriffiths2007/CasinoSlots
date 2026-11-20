@@ -55,9 +55,11 @@ The repository contains source projects, not just playable builds. You can inspe
 
 Contributions, feedback, and suggestions are welcome. If you encounter a problem, please [open an issue](https://github.com/craiggriffiths2007/CasinoSlots/issues).
 
-## Licensing
+## License
 
-The repository is public, but public visibility by itself does not grant permission to redistribute or reuse code and assets. Please check the repository's license and any third-party asset terms before incorporating content into another project. A project license can be added to clarify reuse and contribution rights.
+This project is released under the **[MIT License](LICENSE)**. You are welcome to use, study, modify, and redistribute the code and original game artwork, including in commercial projects, subject to the license terms.
+
+The game artwork, graphics, and visual assets created for this repository are original work. Unity and any separately licensed third-party packages remain subject to their respective terms.
 
 ---
 
